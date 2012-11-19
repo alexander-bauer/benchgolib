@@ -68,11 +68,17 @@ func (s *Session) SendMessage(m Message) (err error) {
 
 //ReceiveMessage is used to retrieve a Message from an input device. It uses bencode to recieve directly from the wire. It does not perform any decryption step.
 func ReceiveMessage(r io.Reader) (m *Message, err error) {
-	err = bencode.NewDecoder(r).Decode(&m)
 	//Since we cannot sensibly handle the error
 	//here, we must return it whether or not it
 	//is nil. The Message, whether or not it
 	//came through, will go with it.
+	err = bencode.NewDecoder(r).Decode(&m)
+	if err == nil {
+		//If there is no error, then the
+		//Message is not nil, and we can
+		//set the timestamp.
+		m.Timestamp = time.Now()
+	}
 	return
 }
 
