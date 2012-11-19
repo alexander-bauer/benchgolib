@@ -10,7 +10,7 @@ import (
 const (
 	Version = "0.0"
 
-	port = "8081"
+	Port = "8081"
 )
 
 //Session is the type which encapsulates a single benchgo session, including temporary key, remote taret, and message history. It can be used to send and recieve message objects.
@@ -44,7 +44,7 @@ func NewSession(local, remote string) (s *Session, err error) {
 
 //SendMessage completely encapsulates the process of sending a single Message to the remote target using a single communication session. It ensures that the Message's SID field is set to the Session's.
 func (s *Session) SendMessage(m Message) (err error) {
-	conn, err := net.Dial("tcp", s.Remote+":"+port)
+	conn, err := net.Dial("tcp", s.Remote+":"+Port)
 	if err != nil {
 		//If the connection could not be made,
 		//return the error.
@@ -66,8 +66,8 @@ func (s *Session) SendMessage(m Message) (err error) {
 	return
 }
 
-//RecieveMessage is used to retrieve a Message from an input device. It uses bencode to recieve directly from the wire. It does not perform any decryption step.
-func RecieveMessage(r io.Reader) (m *Message, err error) {
+//ReceiveMessage is used to retrieve a Message from an input device. It uses bencode to recieve directly from the wire. It does not perform any decryption step.
+func ReceiveMessage(r io.Reader) (m *Message, err error) {
 	err = bencode.NewDecoder(r).Decode(&m)
 	//Since we cannot sensibly handle the error
 	//here, we must return it whether or not it
