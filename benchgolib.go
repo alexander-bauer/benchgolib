@@ -1,6 +1,7 @@
 package benchgolib
 
 import (
+	"code.google.com/p/go.crypto/cast5"
 	"github.com/zeebo/bencode"
 	"io"
 	"net"
@@ -15,10 +16,10 @@ const (
 
 //Session is the type which encapsulates a single benchgo session, including temporary key, remote taret, and message history. It can be used to send and recieve message objects.
 type Session struct {
-	SID     int64       //Identifier for the session.
-	Key     interface{} //To-be-determined.
-	Remote  string      //The address of the remote participant.
-	History []*Message  //The entire history of message objects.
+	SID     int64         //Identifier for the session.
+	Cipher  *cast5.Cipher //To-be-determined.
+	Remote  string        //The address of the remote participant.
+	History []*Message    //The entire history of message objects.
 }
 
 //The Message type is used to encapsulate lone messages, which can be transmitted directly across the wire. It contains the Session ID, timestamp, and the contents of the message, but the timestamp is not transmitted.
@@ -30,12 +31,31 @@ type Message struct {
 
 //NewSession initializes a new session with the remote address. The local address or domain is used to identify the initializing client, (such as with a domain name, as opposed to an IP address.
 func NewSession(local, remote string) (s *Session, err error) {
+	//TODO
 	//SID should be further randomized, as by
 	//a multiplication or addition, followed
 	//by a hash function.
-	SID := time.Now().UnixNano()
+	sid := time.Now().UnixNano()
+
+	//TODO
+	//The key step is really important. This
+	//is where the Diffie-Hellman exchange
+	//should be made, and the 128-bit key
+	//determined.
+	key := make([]byte, 16)
+
+	cipher, err := cast5.NewCipher(key)
+	if err != nil {
+		//TODO
+		//If there is an error, then we
+		//should communicate it to the
+		//other party.
+		return
+	}
+
 	s = &Session{
-		SID:     SID,
+		SID:     sid,
+		Cipher:  cipher,
 		Remote:  remote,
 		History: make([]*Message, 0),
 	}
@@ -52,6 +72,12 @@ func (s *Session) SendMessage(m Message) (err error) {
 	}
 	//Stamp the Message with the current SID.
 	m.SID = s.SID
+
+	//Encrypt the content.
+	m.Content, err = s.arbitraryEncrypt(m.Content)
+	if err != nil {
+		return
+	}
 
 	//Encode direct to the wire.
 	err = bencode.NewEncoder(conn).Encode(m)
@@ -82,7 +108,7 @@ func ReceiveMessage(r io.Reader) (m *Message, err error) {
 	return
 }
 
-//SendString is a wrapper for SendMessage. It creates a Message with the supplied string in the Content field, and with the timestamp as supplied by time.Now().
+//SendString wraps SendMessage. It creates a Message with the supplied string in the Content field, and with the timestamp as supplied by time.Now().
 func (s *Session) SendString(content string) error {
 	return s.SendMessage(Message{
 		Timestamp: time.Now(),
