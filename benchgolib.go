@@ -64,7 +64,10 @@ func NewSession(local, remote string) (s *Session, err error) {
 
 //SendMessage completely encapsulates the process of sending a single Message to the remote target using a single communication session. It ensures that the Message's SID field is set to the Session's.
 func (s *Session) SendMessage(m Message) (err error) {
-	conn, err := net.Dial("tcp", s.Remote+":"+Port)
+	//Open a connection to the remote.
+	//net.JoinHostPort allows us to use IPv6 addresses without
+	//brackets.
+	conn, err := net.Dial("tcp", net.JoinHostPort(s.Remote, Port))
 	if err != nil {
 		//If the connection could not be made,
 		//return the error.
