@@ -92,6 +92,27 @@ func (s *Session) SendMessage(m Message) (err error) {
 	return
 }
 
+//SendString wraps SendMessage. It creates a Message with the supplied string in the Content field, and with the timestamp as supplied by time.Now().
+func (s *Session) SendString(content string) error {
+	return s.SendMessage(Message{
+		Timestamp: time.Now(),
+		Content:   content,
+	})
+}
+
+//GetMessage is used to add an already-recieved Message to the History, then decrypt its contents. It returns a separate, decrypted message.
+func (s *Session) GetMessage(m Message) *Message {
+	//Append the encrypted message to the history.
+	s.History = append(s.History, &m)
+
+	//Decrypt the content.
+	content := s.arbitraryDecrypt(m.Content)
+
+	//Change the Content to the decrypted version.
+	m.Content = content
+	return &m
+}
+
 //ReceiveMessage is used to retrieve a Message from an input device. It uses bencode to recieve directly from the wire. It does not perform any decryption step.
 func ReceiveMessage(r io.Reader) (m *Message, err error) {
 	//Since we cannot sensibly handle the error
@@ -106,12 +127,4 @@ func ReceiveMessage(r io.Reader) (m *Message, err error) {
 		m.Timestamp = time.Now()
 	}
 	return
-}
-
-//SendString wraps SendMessage. It creates a Message with the supplied string in the Content field, and with the timestamp as supplied by time.Now().
-func (s *Session) SendString(content string) error {
-	return s.SendMessage(Message{
-		Timestamp: time.Now(),
-		Content:   content,
-	})
 }
