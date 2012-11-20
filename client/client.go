@@ -3,66 +3,77 @@ package main
 import (
 	"bufio"
 	bench "github.com/SashaCrofter/benchgolib"
-	//"io/ioutil"
+	"io/ioutil"
 	"log"
 	"net"
 	"os"
-	"time"
 )
 
+var S *bench.Session
+
 func main() {
-	//log.SetOutput(ioutil.Discard)
+	log.SetOutput(ioutil.Discard)
 
-	log.Println("Starting session.")
-	s, err := bench.NewSession("client", ui("Remote address: "))
-	if err != nil {
-		log.Println(err)
-	}
-	listen(s)
+	msg := make(chan *bench.Message) //Create a blocking chan
+	listen(msg)
 
-	log.Println("Composing message.")
-	err = s.SendString(ui("Please write your message: "))
-	if err != nil {
-		log.Println(err)
+	sessionStr := "no session"
+
+	println("Type a hostname or IP address to start a session.")
+	for {
+		userinput := ui(sessionStr + "> ")
+		if S == nil {
+			var err error
+			S, err = bench.NewSession("tclient", userinput)
+			if err != nil {
+				log.Println(err)
+				println("Error initializing session.")
+				continue
+			}
+			sessionStr = "s"
+		} else {
+			S.SendString(userinput)
+		}
 	}
-	log.Println("Sent.")
-	time.Sleep(time.Second)
 }
 
-func listen(s *bench.Session) {
+func listen(msg chan *bench.Message) {
 	ln, err := net.Listen("tcp", "0.0.0.0:"+bench.Port)
 	if err != nil {
 		log.Fatal(err)
 	}
 	log.Println("Listening on", ln.Addr())
-	go func(s *bench.Session) {
+	go func(msg chan<- *bench.Message) {
 		for {
 			conn, err := ln.Accept()
 			if err != nil {
 				log.Println(conn.RemoteAddr().String(), err)
 				continue
 			}
-			go showMessage(conn, s)
+			go handle(conn, msg)
 		}
-	}(s)
+	}(msg)
+	go func(msg <-chan *bench.Message) {
+		for m := range msg {
+			showMessage(S, m)
+		}
+	}(msg)
 }
 
-func showMessage(conn net.Conn, s *bench.Session) {
+func handle(conn net.Conn, msg chan<- *bench.Message) {
 	defer conn.Close()
-	log.Println("Message.")
+	log.Println("Incoming from", conn.RemoteAddr().String())
 	m, err := bench.ReceiveMessage(conn)
 	if err != nil {
 		log.Println(err)
 		return
 	}
-	if m == nil || s == nil {
-		println("nil")
-		return
-	}
-	md := s.GetMessage(*m)
+	msg <- m
+}
 
-	print("From ", conn.RemoteAddr().String(), ":\n")
-	print(" ", md.Content, "\n")
+func showMessage(s *bench.Session, m *bench.Message) {
+	md := s.GetMessage(*m)
+	println(md.Content)
 }
 
 func ui(prompt string) string {
@@ -71,8 +82,10 @@ func ui(prompt string) string {
 		print(prompt)
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			log.Println(err)
-			continue
+			//The user may have meant to exit,
+			//as with ctrl+D, so exit here.
+			println()
+			log.Fatal(err)
 		}
 		return line[:len(line)-1] //Remove the newline byte.
 	}
