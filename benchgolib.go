@@ -22,12 +22,13 @@ const (
 )
 
 var (
-	privKey *rsa.PrivateKey //The in-memory PrivateKey if NewSession isn't given a function for getting it.
+	privKey *rsa.PrivateKey     //In-memory PrivateKey if NewSession if a proper SessionManager isn't supplied
+	sMap    map[uint64]*Session //In-memory Session map for Session and Message functions to use, if SessionManager is not supplied
 )
 
 //Session is the type which encapsulates a single benchgo session, including temporary key, remote taret, and message history. It can be used to send and recieve message objects.
 type Session struct {
-	SID     []byte        //Identifier for the session.
+	SID     uint64        //Identifier for the session.
 	Cipher  *cast5.Cipher //The CAST5 Cipher type
 	RSAKey  RSAKey        //The RSAKey interface for getting a valid RSA key
 	Remote  string        //The address of the remote participant.
@@ -36,7 +37,7 @@ type Session struct {
 
 //The Message type is used to encapsulate lone messages, which can be transmitted directly across the wire. It contains the Session ID, timestamp, and the contents of the message, but the timestamp is not transmitted.
 type Message struct {
-	SID       []byte    `bencode:"sid"` //The session identifier.
+	SID       uint64    `bencode:"sid"` //The session identifier.
 	Timestamp time.Time `bencode:"-"`   //The time of composition.
 	Content   string    `bencode:"c"`   //The message contained by the structure.
 }
@@ -364,7 +365,7 @@ func (s *Session) GetMessage(m Message) *Message {
 }
 
 //ReceiveMessage is used to retrieve a Message from an input device. It uses bencode to recieve directly from the wire. It does not perform any decryption step.
-func ReceiveMessage(r io.Reader) (m *Message, err error) {
+func ReceiveMessage(r io.Reader, rsaKey RSAKey) (m *Message, err error) {
 	//Since we cannot sensibly handle the error
 	//here, we must return it whether or not it
 	//is nil. The Message, whether or not it

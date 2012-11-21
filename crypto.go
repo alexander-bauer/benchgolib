@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"encoding/binary"
 )
 
 //sessionKeyGen uses crypto/rand to generate 64 random bits to use as a session key.
@@ -14,17 +15,14 @@ func sessionKeyGen() (key []byte, err error) {
 }
 
 //getSID uses crypto/sha256 to compute the session ID by appending the receiving address to the initiating address, hashing them, and taking the first 8 bytes of the result. The network addresses should not have port numbers, and should be in the form as returned by net.SplitHostPort().
-func getSID(initiating, receiving string) (sid []byte) {
-	//Prepare the sid buffer.
-	sid = make([]byte, 8)
-
+func getSID(initiating, receiving string) (sid uint64) {
 	//We must get a hash.Hash object,
 	//so that we can use Write() and
 	//Sum() to retrieve the hash
 	//value, then copy to the buffer.
 	hash := sha256.New()
 	hash.Write([]byte(initiating + receiving))
-	copy(sid, hash.Sum(nil)[0:8])
+	sid, _ = binary.Uvarint(hash.Sum(nil)[0:8])
 	return
 }
 
