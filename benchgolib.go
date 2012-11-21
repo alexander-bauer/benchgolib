@@ -90,6 +90,7 @@ func NewSession(local, remote string, rsaKey RSAKey) (s *Session, err error) {
 	if err != nil {
 		return
 	}
+	defer conn.Close()
 	e, d := bencode.NewEncoder(conn), bencode.NewDecoder(conn)
 	key := make([]byte, 16)
 
@@ -107,7 +108,6 @@ func NewSession(local, remote string, rsaKey RSAKey) (s *Session, err error) {
 	if err != nil {
 		return
 	}
-	return
 
 	//Now we get the remote's response. If establishing:
 	//* Their version
