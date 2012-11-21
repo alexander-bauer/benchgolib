@@ -18,7 +18,7 @@ const (
 	NewSessionMsg  = "NEW SESSION"
 	OkaySessionMsg = "OKAY"
 
-	keySize = 512 //Default keysize for in-memory keys
+	keySize = 2048 //Default keysize for in-memory keys
 )
 
 var (
