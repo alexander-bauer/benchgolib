@@ -261,11 +261,16 @@ func ReceiveSession(conn net.Conn, rsaKey RSAKey) (s *Session, err error) {
 		return
 	}
 
+	remote, _, err := net.SplitHostPort(conn.RemoteAddr().String())
+	if err != nil {
+		return
+	}
+
 	s = &Session{
 		SID:     time.Now().UnixNano(),
 		Cipher:  cipher,
 		RSAKey:  rsaKey,
-		Remote:  conn.RemoteAddr().String(),
+		Remote:  remote,
 		History: make([]*Message, 0),
 	}
 	conn.Close()
