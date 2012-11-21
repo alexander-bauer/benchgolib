@@ -36,7 +36,10 @@ func main() {
 				continue
 			}
 		} else {
-			S.SendString(userinput)
+			err := S.SendString(userinput)
+			if err != nil {
+				log.Println(err)
+			}
 		}
 	}
 }
