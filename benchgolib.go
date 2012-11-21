@@ -27,7 +27,7 @@ var (
 
 //Session is the type which encapsulates a single benchgo session, including temporary key, remote taret, and message history. It can be used to send and recieve message objects.
 type Session struct {
-	SID     int64         //Identifier for the session.
+	SID     []byte        //Identifier for the session.
 	Cipher  *cast5.Cipher //The CAST5 Cipher type
 	RSAKey  RSAKey        //The RSAKey interface for getting a valid RSA key
 	Remote  string        //The address of the remote participant.
@@ -36,7 +36,7 @@ type Session struct {
 
 //The Message type is used to encapsulate lone messages, which can be transmitted directly across the wire. It contains the Session ID, timestamp, and the contents of the message, but the timestamp is not transmitted.
 type Message struct {
-	SID       int64     `bencode:"sid"` //The session identifier.
+	SID       []byte    `bencode:"sid"` //The session identifier.
 	Timestamp time.Time `bencode:"-"`   //The time of composition.
 	Content   string    `bencode:"c"`   //The message contained by the structure.
 }
@@ -60,14 +60,8 @@ type sessionEstablish struct {
 	HalfKey    []byte `bencode:"k"`
 }
 
-//NewSession initializes a new session with the remote address. The local address or domain is used to identify the initializing client, (such as with a domain name, as opposed to an IP address.
-func NewSession(local, remote string, rsaKey RSAKey) (s *Session, err error) {
-	//TODO
-	//SID should be further randomized, as by
-	//a multiplication or addition, followed
-	//by a hash function.
-	sid := time.Now().UnixNano()
-
+//NewSession initializes a new session with the remote address. It causes a dialogue and key exchange between the remote and local clients. If rsaKey is not specified, then this function generates a RSA key and keeps it in memory. Future calls will return the same key for the duration of the program's running.
+func NewSession(remote string, rsaKey RSAKey) (s *Session, err error) {
 	//If our rsaKey function was not supplied,
 	//then we must define our own.
 	if rsaKey == nil {
@@ -91,6 +85,25 @@ func NewSession(local, remote string, rsaKey RSAKey) (s *Session, err error) {
 		return
 	}
 	defer conn.Close()
+
+	//Once the connection is established, both
+	//clients will generate a session ID based
+	//on a known and determined method.
+
+	//For that, we need the local address, as
+	//seen by the remote.
+	local, _, err := net.SplitHostPort(conn.LocalAddr().String())
+	if err != nil {
+		//In the unlikely event that this
+		//gives an error, close the conn
+		//(via defer) and return.
+		return
+	}
+	//This will hash the local and remote
+	//together predictably. The remote client
+	//will put our address first, as well.
+	sid := getSID(local, remote)
+
 	e, d := bencode.NewEncoder(conn), bencode.NewDecoder(conn)
 	key := make([]byte, 16)
 
@@ -192,6 +205,30 @@ func ReceiveSession(conn net.Conn, rsaKey RSAKey) (s *Session, err error) {
 		rsaKey = defRSAKey{}
 	}
 
+	//Now that the connection is established,
+	//we need to have the same session ID as
+	//the remote client.
+
+	//For that, we need the remote address,
+	remote, _, err := net.SplitHostPort(conn.RemoteAddr().String())
+	if err != nil {
+		return
+	}
+
+	//We also need the local address, as
+	//seen by the remote.
+	local, _, err := net.SplitHostPort(conn.LocalAddr().String())
+	if err != nil {
+		//In the unlikely event that this
+		//gives an error, close the conn
+		//(via defer) and return.
+		return
+	}
+	//This will hash the local and remote
+	//together predictably. We put the
+	//remote's address first, as do they.
+	sid := getSID(remote, local)
+
 	e, d := bencode.NewEncoder(conn), bencode.NewDecoder(conn)
 
 	var request sessionEstablish
@@ -261,13 +298,8 @@ func ReceiveSession(conn net.Conn, rsaKey RSAKey) (s *Session, err error) {
 		return
 	}
 
-	remote, _, err := net.SplitHostPort(conn.RemoteAddr().String())
-	if err != nil {
-		return
-	}
-
 	s = &Session{
-		SID:     time.Now().UnixNano(),
+		SID:     sid,
 		Cipher:  cipher,
 		RSAKey:  rsaKey,
 		Remote:  remote,
