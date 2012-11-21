@@ -3,7 +3,7 @@ package main
 import (
 	"bufio"
 	bench "github.com/SashaCrofter/benchgolib"
-	"io/ioutil"
+	//"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -12,7 +12,7 @@ import (
 var S *bench.Session
 
 func main() {
-	log.SetOutput(ioutil.Discard)
+	//log.SetOutput(ioutil.Discard)
 
 	msg := make(chan *bench.Message) //Create a blocking chan
 	listen(msg)

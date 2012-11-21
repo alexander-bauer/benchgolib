@@ -3,8 +3,10 @@ package benchgolib
 import (
 	"code.google.com/p/go.crypto/cast5"
 	"crypto/rsa"
+	"errors"
 	"github.com/zeebo/bencode"
 	"io"
+	"math/big"
 	"net"
 	"time"
 )
@@ -12,9 +14,11 @@ import (
 const (
 	Version = "0.2"
 
-	Port = "8081"
+	Port           = "8081"
+	NewSessionMsg  = "NEW SESSION"
+	OkaySessionMsg = "OKAY"
 
-	keySize = 2048 //Default keysize for in-memory keys
+	keySize = 512 //Default keysize for in-memory keys
 )
 
 var (
@@ -48,6 +52,14 @@ func (rsaKey defRSAKey) Get() *rsa.PrivateKey {
 	return privKey
 }
 
+type sessionEstablish struct {
+	Version    string `bencode:"v"`
+	Type       string `bencode:"t"`
+	PKModulus  string `bencode:"m"`
+	PKExponent int    `bencode:"e"`
+	HalfKey    []byte `bencode:"k"`
+}
+
 //NewSession initializes a new session with the remote address. The local address or domain is used to identify the initializing client, (such as with a domain name, as opposed to an IP address.
 func NewSession(local, remote string, rsaKey RSAKey) (s *Session, err error) {
 	//TODO
@@ -70,11 +82,76 @@ func NewSession(local, remote string, rsaKey RSAKey) (s *Session, err error) {
 		rsaKey = defRSAKey{}
 	}
 
-	//TODO
-	//The key step is really important. This
-	//is where the RSA exchange should be
-	//made, and the 128-bit key determined.
+	//Here, we must establish the session key
+	//with the remote client. First, we'll
+	//make sure that the connection will get
+	//through.
+	conn, err := net.Dial("tcp", net.JoinHostPort(remote, Port))
+	if err != nil {
+		return
+	}
+	e, d := bencode.NewEncoder(conn), bencode.NewDecoder(conn)
 	key := make([]byte, 16)
+
+	//Send the message initialization request, with:
+	//* Our version
+	//* "NEW SESSION"
+	//* Our public key
+	err = e.Encode(&sessionEstablish{
+		Version: Version,
+		Type:    NewSessionMsg,
+	})
+	if err != nil {
+		return
+	}
+	return
+
+	//Now we get the remote's response. If establishing:
+	//* Their version
+	//* "OKAY"
+	//* Their public key
+	//* Their session key half (encrypted to our key)
+	var response sessionEstablish
+	err = d.Decode(&response)
+	if err != nil {
+		return
+	}
+
+	if response.Type != OkaySessionMsg || len(response.PKModulus) == 0 || response.PKExponent == 0 || response.HalfKey == nil {
+		return nil, errors.New("remote client declined session request")
+	}
+	remoteModulus, _ := new(big.Int).SetString(response.PKModulus, 0)
+	remoteKey := &rsa.PublicKey{
+		N: remoteModulus,
+		E: response.PKExponent,
+	}
+
+	//Supposing that everything was okay, decrypt their HalfKey half
+	tmpKey, err := keyDecrypt(rsaKey.Get(), response.HalfKey)
+	if err != nil {
+		return
+	}
+	copy(key[0:8], tmpKey)
+
+	tmpKey, err = sessionKeyGen()
+	if err != nil {
+		return
+	}
+	copy(key[8:16], tmpKey)
+
+	eKey, err := keyEncrypt(remoteKey, key[8:16])
+	if err != nil {
+		return
+	}
+
+	err = e.Encode(&sessionEstablish{
+		Version: Version,
+		Type:    OkaySessionMsg,
+		HalfKey: eKey,
+	})
+	if err != nil {
+		return
+	}
 
 	cipher, err := cast5.NewCipher(key)
 	if err != nil {
