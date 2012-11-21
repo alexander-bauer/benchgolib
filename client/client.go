@@ -29,7 +29,7 @@ func main() {
 		if S == nil {
 			println("Generating key. (This may take a while.)")
 			var err error
-			S, err = bench.NewSession("tclient", userinput, nil)
+			S, err = bench.NewSession(userinput, nil)
 			if err != nil {
 				log.Println(err)
 				println("Error initializing session.")
