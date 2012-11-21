@@ -3,13 +3,12 @@ package benchgolib
 import (
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha256"
 )
 
 //sessionKeyGen uses crypto/rand to generate 64 random bits to use as a session key.
 func sessionKeyGen() (key []byte, err error) {
-	key = make([]byte, 8)    //Length 64 bits
-	_, err := rand.Read(key) //Fill key with random data
+	key = make([]byte, 8)   //Length 64 bits
+	_, err = rand.Read(key) //Fill key with random data
 	return
 }
 
@@ -18,14 +17,14 @@ func rsaGen(size int) (key *rsa.PrivateKey, err error) {
 	return rsa.GenerateKey(rand.Reader, size)
 }
 
-//rsaEncrypt encrypts a byte array to the rsa public key passed it, and returns the resultant byte array. It uses a sha256.New() and rand.Reader to pass to rsa.EncryptOAEP.
-func rsaEncrypt(key *rsa.PublicKey, data []byte) (crp []byte, err error) {
-	return rsa.EncryptOAEP(sha256.New(), rand.Reader, key, data)
+//keyEncrypt encrypts a byte array to the rsa public key passed it, and returns the resultant byte array. It uses rand.Reader to pass to rsa.EncryptPKCS1v15.
+func keyEncrypt(key *rsa.PublicKey, data []byte) (crp []byte, err error) {
+	return rsa.EncryptPKCS1v15(rand.Reader, key, data)
 }
 
-//rsaDecrypt is the sister function to rsaEncrypt. It .
-func rsaEncrypt(key *rsa.PublicKey, data []byte) (crp []byte, err error) {
-	return rsa.DecryptOAEP(sha256.New(), rand.Reader, key, data)
+//keyDecrypt is the sister function to rsaEncrypt.
+func keyDecrypt(key *rsa.PrivateKey, data []byte) (crp []byte, err error) {
+	return rsa.DecryptPKCS1v15(rand.Reader, key, data)
 }
 
 //arbitraryEncrypt implements a simple for-loop and zero-padding to user s.Cipher to encrypt an arbitrary length byte array. It returns the enciphered byte array, which may not be the same length.
