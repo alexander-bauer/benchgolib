@@ -1,6 +1,18 @@
 package benchgolib
 
-import ()
+import (
+	"crypto/rand"
+	"crypto/rsa"
+)
+
+func rsaGen(size int) (key *rsa.PrivateKey, err error) {
+	return rsa.GenerateKey(rand.Reader, size)
+}
+
+//rsaEncrypt encrypts a byte array to the rsa public key passed it, and returns the resultant byte array.
+func rsaEncrypt(key *rsa.PublicKey, data []byte) (crp []byte, err error) {
+	return nil, nil
+}
 
 //arbitraryEncrypt implements a simple for-loop and zero-padding to user s.Cipher to encrypt an arbitrary length byte array. It returns the enciphered byte array, which may not be the same length.
 func (s *Session) arbitraryEncrypt(src string) (string, error) {

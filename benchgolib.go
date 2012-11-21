@@ -2,6 +2,7 @@ package benchgolib
 
 import (
 	"code.google.com/p/go.crypto/cast5"
+	"crypto/rsa"
 	"github.com/zeebo/bencode"
 	"io"
 	"net"
@@ -12,12 +13,19 @@ const (
 	Version = "0.2"
 
 	Port = "8081"
+
+	keySize = 2048 //Default keysize for in-memory keys
+)
+
+var (
+	privKey *rsa.PrivateKey //The in-memory PrivateKey if NewSession isn't given a function for getting it.
 )
 
 //Session is the type which encapsulates a single benchgo session, including temporary key, remote taret, and message history. It can be used to send and recieve message objects.
 type Session struct {
 	SID     int64         //Identifier for the session.
-	Cipher  *cast5.Cipher //To-be-determined.
+	Cipher  *cast5.Cipher //The CAST5 Cipher type
+	RSAKey  RSAKey        //The RSAKey interface for getting a valid RSA key
 	Remote  string        //The address of the remote participant.
 	History []*Message    //The entire history of message objects.
 }
@@ -29,19 +37,43 @@ type Message struct {
 	Content   string    `bencode:"c"`   //The message contained by the structure.
 }
 
+//The RSAKey interface wraps the internal Get(), which should return a valid *rsa.PrivateKey.
+type RSAKey interface {
+	Get() *rsa.PrivateKey
+}
+
+type defRSAKey struct{}
+
+func (rsaKey defRSAKey) Get() *rsa.PrivateKey {
+	return privKey
+}
+
 //NewSession initializes a new session with the remote address. The local address or domain is used to identify the initializing client, (such as with a domain name, as opposed to an IP address.
-func NewSession(local, remote string) (s *Session, err error) {
+func NewSession(local, remote string, rsaKey RSAKey) (s *Session, err error) {
 	//TODO
 	//SID should be further randomized, as by
 	//a multiplication or addition, followed
 	//by a hash function.
 	sid := time.Now().UnixNano()
 
+	//If our rsaKey function was not supplied,
+	//then we must define our own.
+	if rsaKey == nil {
+		//If our in-memory key does not
+		//exist, then we must generate it.
+		if privKey == nil {
+			privKey, err = rsaGen(keySize)
+			if err != nil {
+				return
+			}
+		}
+		rsaKey = defRSAKey{}
+	}
+
 	//TODO
 	//The key step is really important. This
-	//is where the Diffie-Hellman exchange
-	//should be made, and the 128-bit key
-	//determined.
+	//is where the RSA exchange should be
+	//made, and the 128-bit key determined.
 	key := make([]byte, 16)
 
 	cipher, err := cast5.NewCipher(key)
@@ -56,6 +88,7 @@ func NewSession(local, remote string) (s *Session, err error) {
 	s = &Session{
 		SID:     sid,
 		Cipher:  cipher,
+		RSAKey:  rsaKey,
 		Remote:  remote,
 		History: make([]*Message, 0),
 	}

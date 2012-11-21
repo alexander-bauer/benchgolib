@@ -23,8 +23,9 @@ func main() {
 	for {
 		userinput := ui(sessionStr + "> ")
 		if S == nil {
+			println("Generating key. (This may take a while.)")
 			var err error
-			S, err = bench.NewSession("tclient", userinput)
+			S, err = bench.NewSession("tclient", userinput, nil)
 			if err != nil {
 				log.Println(err)
 				println("Error initializing session.")
