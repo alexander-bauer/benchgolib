@@ -99,9 +99,9 @@ func NewSession(local, remote string, rsaKey RSAKey) (s *Session, err error) {
 	//* Our public key
 	pubKey := rsaKey.Get().PublicKey
 	err = e.Encode(&sessionEstablish{
-		Version: Version,
-		Type:    NewSessionMsg,
-		PKModulus: pubKey.N.String(),
+		Version:    Version,
+		Type:       NewSessionMsg,
+		PKModulus:  pubKey.N.String(),
 		PKExponent: pubKey.E,
 	})
 	if err != nil {
@@ -193,13 +193,13 @@ func ReceiveSession(conn net.Conn, rsaKey RSAKey) (s *Session, err error) {
 	}
 
 	e, d := bencode.NewEncoder(conn), bencode.NewDecoder(conn)
-	
+
 	var request sessionEstablish
 	err = d.Decode(&request)
 	if err != nil {
 		return
 	}
-	
+
 	if request.Type != NewSessionMsg || len(request.PKModulus) == 0 || request.PKExponent == 0 {
 		return
 	}
@@ -209,32 +209,32 @@ func ReceiveSession(conn net.Conn, rsaKey RSAKey) (s *Session, err error) {
 		N: remoteModulus,
 		E: request.PKExponent,
 	}
-	
+
 	key := make([]byte, 16)
-	
+
 	tmpKey, err := sessionKeyGen()
 	if err != nil {
 		return
 	}
 	copy(key[0:8], tmpKey)
-	
+
 	tmpKey, err = keyEncrypt(remoteKey, key[0:8])
 	if err != nil {
 		return
 	}
-	
+
 	pubkey := rsaKey.Get().PublicKey
 	err = e.Encode(sessionEstablish{
-		Version: Version,
-		Type: OkaySessionMsg,
-		PKModulus: pubkey.N.String(),
+		Version:    Version,
+		Type:       OkaySessionMsg,
+		PKModulus:  pubkey.N.String(),
 		PKExponent: pubkey.E,
-		HalfKey: tmpKey,
+		HalfKey:    tmpKey,
 	})
 	if err != nil {
 		return
 	}
-	
+
 	var response sessionEstablish
 	err = d.Decode(&response)
 	if err != nil {
@@ -243,15 +243,15 @@ func ReceiveSession(conn net.Conn, rsaKey RSAKey) (s *Session, err error) {
 	if response.Type != OkaySessionMsg || response.HalfKey == nil {
 		return
 	}
-	
+
 	tmpKey, err = keyDecrypt(rsaKey.Get(), response.HalfKey)
 	if err != nil {
 		return
 	}
 	copy(key[8:16], tmpKey)
-	
+
 	//Now the local and remote share the key
-	
+
 	cipher, err := cast5.NewCipher(key)
 	if err != nil {
 		//TODO
@@ -260,7 +260,7 @@ func ReceiveSession(conn net.Conn, rsaKey RSAKey) (s *Session, err error) {
 		//other party.
 		return
 	}
-	
+
 	s = &Session{
 		SID:     time.Now().UnixNano(),
 		Cipher:  cipher,
@@ -271,7 +271,6 @@ func ReceiveSession(conn net.Conn, rsaKey RSAKey) (s *Session, err error) {
 	conn.Close()
 	return
 }
-
 
 //SendMessage completely encapsulates the process of sending a single Message to the remote target using a single communication session. It ensures that the Message's SID field is set to the Session's.
 func (s *Session) SendMessage(m Message) (err error) {
