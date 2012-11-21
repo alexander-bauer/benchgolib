@@ -17,10 +17,14 @@ func main() {
 	msg := make(chan *bench.Message) //Create a blocking chan
 	listen(msg)
 
-	sessionStr := "no session"
-
 	println("Type a hostname or IP address to start a session.")
 	for {
+		var sessionStr string
+		if S == nil {
+			sessionStr = "no session"
+		} else {
+			sessionStr = S.Remote
+		}
 		userinput := ui(sessionStr + "> ")
 		if S == nil {
 			println("Generating key. (This may take a while.)")
@@ -31,7 +35,6 @@ func main() {
 				println("Error initializing session.")
 				continue
 			}
-			sessionStr = "s"
 		} else {
 			S.SendString(userinput)
 		}
