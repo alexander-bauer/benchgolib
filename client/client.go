@@ -64,6 +64,14 @@ func listen(msg chan *bench.Message) {
 func handle(conn net.Conn, msg chan<- *bench.Message) {
 	defer conn.Close()
 	log.Println("Incoming from", conn.RemoteAddr().String())
+	if S == nil {
+		s, err := bench.ReceiveSession(conn, nil)
+		if err != nil {
+			log.Println(err)
+		}
+		S = s
+		return
+	}
 	m, err := bench.ReceiveMessage(conn)
 	if err != nil {
 		log.Println(err)

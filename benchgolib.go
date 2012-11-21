@@ -97,9 +97,12 @@ func NewSession(local, remote string, rsaKey RSAKey) (s *Session, err error) {
 	//* Our version
 	//* "NEW SESSION"
 	//* Our public key
+	pubKey := rsaKey.Get().PublicKey
 	err = e.Encode(&sessionEstablish{
 		Version: Version,
 		Type:    NewSessionMsg,
+		PKModulus: pubKey.N.String(),
+		PKExponent: pubKey.E,
 	})
 	if err != nil {
 		return
@@ -139,7 +142,7 @@ func NewSession(local, remote string, rsaKey RSAKey) (s *Session, err error) {
 	}
 	copy(key[8:16], tmpKey)
 
-	eKey, err := keyEncrypt(remoteKey, key[8:16])
+	tmpKey, err = keyEncrypt(remoteKey, key[8:16])
 	if err != nil {
 		return
 	}
@@ -147,7 +150,7 @@ func NewSession(local, remote string, rsaKey RSAKey) (s *Session, err error) {
 	err = e.Encode(&sessionEstablish{
 		Version: Version,
 		Type:    OkaySessionMsg,
-		HalfKey: eKey,
+		HalfKey: tmpKey,
 	})
 	if err != nil {
 		return
@@ -171,6 +174,104 @@ func NewSession(local, remote string, rsaKey RSAKey) (s *Session, err error) {
 	}
 	return s, nil
 }
+
+//ReceiveSession
+func ReceiveSession(conn net.Conn, rsaKey RSAKey) (s *Session, err error) {
+	defer conn.Close()
+	//If our rsaKey function was not supplied,
+	//then we must define our own.
+	if rsaKey == nil {
+		//If our in-memory key does not
+		//exist, then we must generate it.
+		if privKey == nil {
+			privKey, err = rsaGen(keySize)
+			if err != nil {
+				return
+			}
+		}
+		rsaKey = defRSAKey{}
+	}
+
+	e, d := bencode.NewEncoder(conn), bencode.NewDecoder(conn)
+	
+	var request sessionEstablish
+	err = d.Decode(&request)
+	if err != nil {
+		return
+	}
+	
+	if request.Type != NewSessionMsg || len(request.PKModulus) == 0 || request.PKExponent == 0 {
+		return
+	}
+	//Reconstruct the key.
+	remoteModulus, _ := new(big.Int).SetString(request.PKModulus, 0)
+	remoteKey := &rsa.PublicKey{
+		N: remoteModulus,
+		E: request.PKExponent,
+	}
+	
+	key := make([]byte, 16)
+	
+	tmpKey, err := sessionKeyGen()
+	if err != nil {
+		return
+	}
+	copy(key[0:8], tmpKey)
+	
+	tmpKey, err = keyEncrypt(remoteKey, key[0:8])
+	if err != nil {
+		return
+	}
+	
+	pubkey := rsaKey.Get().PublicKey
+	err = e.Encode(sessionEstablish{
+		Version: Version,
+		Type: OkaySessionMsg,
+		PKModulus: pubkey.N.String(),
+		PKExponent: pubkey.E,
+		HalfKey: tmpKey,
+	})
+	if err != nil {
+		return
+	}
+	
+	var response sessionEstablish
+	err = d.Decode(&response)
+	if err != nil {
+		return
+	}
+	if response.Type != OkaySessionMsg || response.HalfKey == nil {
+		return
+	}
+	
+	tmpKey, err = keyDecrypt(rsaKey.Get(), response.HalfKey)
+	if err != nil {
+		return
+	}
+	copy(key[8:16], tmpKey)
+	
+	//Now the local and remote share the key
+	
+	cipher, err := cast5.NewCipher(key)
+	if err != nil {
+		//TODO
+		//If there is an error, then we
+		//should communicate it to the
+		//other party.
+		return
+	}
+	
+	s = &Session{
+		SID:     time.Now().UnixNano(),
+		Cipher:  cipher,
+		RSAKey:  rsaKey,
+		Remote:  conn.RemoteAddr().String(),
+		History: make([]*Message, 0),
+	}
+	conn.Close()
+	return
+}
+
 
 //SendMessage completely encapsulates the process of sending a single Message to the remote target using a single communication session. It ensures that the Message's SID field is set to the Session's.
 func (s *Session) SendMessage(m Message) (err error) {
