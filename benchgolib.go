@@ -28,11 +28,11 @@ var (
 
 //Session is the type which encapsulates a single benchgo session, including temporary key, remote taret, and message history. It can be used to send and recieve message objects.
 type Session struct {
-	SID     uint64        //Identifier for the session.
-	Cipher  *cast5.Cipher //The CAST5 Cipher type
-	RSAKey  RSAKey        //The RSAKey interface for getting a valid RSA key
-	Remote  string        //The address of the remote participant.
-	History []*Message    //The entire history of message objects.
+	SID            uint64         //Identifier for the session.
+	Cipher         *cast5.Cipher  //The CAST5 Cipher type
+	SessionManager SessionManager //The SessionManager interface for getting a valid RSA key and Sessions by ID
+	Remote         string         //The address of the remote participant.
+	History        []*Message     //The entire history of message objects.
 }
 
 //The Message type is used to encapsulate lone messages, which can be transmitted directly across the wire. It contains the Session ID, timestamp, and the contents of the message, but the timestamp is not transmitted.
@@ -42,14 +42,25 @@ type Message struct {
 	Content   string    `bencode:"c"`   //The message contained by the structure.
 }
 
-//The RSAKey interface wraps the internal Get(), which should return a valid *rsa.PrivateKey.
-type RSAKey interface {
-	Get() *rsa.PrivateKey
+//The SessionManager interface wraps the internal PrivateKey(), which should return a valid *rsa.PrivateKey, and the internal SessionByID(), which should return a *Session based on the given uint64.
+type SessionManager interface {
+	AddSession(s *Session) error
+	SessionByID(sid uint64) *Session
+	PrivateKey() *rsa.PrivateKey
 }
 
-type defRSAKey struct{}
+type defSessionManager struct{}
 
-func (rsaKey defRSAKey) Get() *rsa.PrivateKey {
+func (manager defSessionManager) AddSession(s *Session) error {
+	sMap[s.SID] = s
+	return nil
+}
+
+func (manager defSessionManager) SessionByID(sid uint64) *Session {
+	return sMap[sid]
+}
+
+func (manager defSessionManager) PrivateKey() *rsa.PrivateKey {
 	return privKey
 }
 
@@ -61,11 +72,11 @@ type sessionEstablish struct {
 	HalfKey    []byte `bencode:"k"`
 }
 
-//NewSession initializes a new session with the remote address. It causes a dialogue and key exchange between the remote and local clients. If rsaKey is not specified, then this function generates a RSA key and keeps it in memory. Future calls will return the same key for the duration of the program's running.
-func NewSession(remote string, rsaKey RSAKey) (s *Session, err error) {
-	//If our rsaKey function was not supplied,
+//NewSession initializes a new session with the remote address. It causes a dialogue and key exchange between the remote and local clients. If manager is not specified, then this function generates a RSA key and keeps it in memory. Future calls will return the same key for the duration of the program's running. If a new Session is initialized properly, NewSession invokes AddSession() on the manager.
+func NewSession(remote string, manager SessionManager) (s *Session, err error) {
+	//If our manager function was not supplied,
 	//then we must define our own.
-	if rsaKey == nil {
+	if manager == nil {
 		//If our in-memory key does not
 		//exist, then we must generate it.
 		if privKey == nil {
@@ -74,7 +85,10 @@ func NewSession(remote string, rsaKey RSAKey) (s *Session, err error) {
 				return
 			}
 		}
-		rsaKey = defRSAKey{}
+		if sMap == nil {
+			sMap = make(map[uint64]*Session)
+		}
+		manager = defSessionManager{}
 	}
 
 	//Here, we must establish the session key
@@ -112,7 +126,7 @@ func NewSession(remote string, rsaKey RSAKey) (s *Session, err error) {
 	//* Our version
 	//* "NEW SESSION"
 	//* Our public key
-	pubKey := rsaKey.Get().PublicKey
+	pubKey := manager.PrivateKey().PublicKey
 	err = e.Encode(&sessionEstablish{
 		Version:    Version,
 		Type:       NewSessionMsg,
@@ -144,7 +158,7 @@ func NewSession(remote string, rsaKey RSAKey) (s *Session, err error) {
 	}
 
 	//Supposing that everything was okay, decrypt their HalfKey half
-	tmpKey, err := keyDecrypt(rsaKey.Get(), response.HalfKey)
+	tmpKey, err := keyDecrypt(manager.PrivateKey(), response.HalfKey)
 	if err != nil {
 		return
 	}
@@ -180,21 +194,22 @@ func NewSession(remote string, rsaKey RSAKey) (s *Session, err error) {
 	}
 
 	s = &Session{
-		SID:     sid,
-		Cipher:  cipher,
-		RSAKey:  rsaKey,
-		Remote:  remote,
-		History: make([]*Message, 0),
+		SID:            sid,
+		Cipher:         cipher,
+		SessionManager: manager,
+		Remote:         remote,
+		History:        make([]*Message, 0),
 	}
-	return s, nil
+	err = manager.AddSession(s)
+	return
 }
 
 //ReceiveSession
-func ReceiveSession(conn net.Conn, rsaKey RSAKey) (s *Session, err error) {
+func ReceiveSession(conn net.Conn, manager SessionManager) (s *Session, err error) {
 	defer conn.Close()
-	//If our rsaKey function was not supplied,
+	//If our manager function was not supplied,
 	//then we must define our own.
-	if rsaKey == nil {
+	if manager == nil {
 		//If our in-memory key does not
 		//exist, then we must generate it.
 		if privKey == nil {
@@ -203,7 +218,11 @@ func ReceiveSession(conn net.Conn, rsaKey RSAKey) (s *Session, err error) {
 				return
 			}
 		}
-		rsaKey = defRSAKey{}
+		if sMap == nil {
+			sMap = make(map[uint64]*Session)
+
+		}
+		manager = defSessionManager{}
 	}
 
 	//Now that the connection is established,
@@ -261,7 +280,7 @@ func ReceiveSession(conn net.Conn, rsaKey RSAKey) (s *Session, err error) {
 		return
 	}
 
-	pubkey := rsaKey.Get().PublicKey
+	pubkey := manager.PrivateKey().PublicKey
 	err = e.Encode(sessionEstablish{
 		Version:    Version,
 		Type:       OkaySessionMsg,
@@ -282,7 +301,7 @@ func ReceiveSession(conn net.Conn, rsaKey RSAKey) (s *Session, err error) {
 		return
 	}
 
-	tmpKey, err = keyDecrypt(rsaKey.Get(), response.HalfKey)
+	tmpKey, err = keyDecrypt(manager.PrivateKey(), response.HalfKey)
 	if err != nil {
 		return
 	}
@@ -300,13 +319,13 @@ func ReceiveSession(conn net.Conn, rsaKey RSAKey) (s *Session, err error) {
 	}
 
 	s = &Session{
-		SID:     sid,
-		Cipher:  cipher,
-		RSAKey:  rsaKey,
-		Remote:  remote,
-		History: make([]*Message, 0),
+		SID:            sid,
+		Cipher:         cipher,
+		SessionManager: manager,
+		Remote:         remote,
+		History:        make([]*Message, 0),
 	}
-	conn.Close()
+	err = manager.AddSession(s)
 	return
 }
 
@@ -351,31 +370,27 @@ func (s *Session) SendString(content string) error {
 	})
 }
 
-//GetMessage is used to add an already-recieved Message to the History, then decrypt its contents. It returns a separate, decrypted message.
-func (s *Session) GetMessage(m Message) *Message {
-	//Append the encrypted message to the history.
-	s.History = append(s.History, &m)
-
-	//Decrypt the content.
-	content := s.arbitraryDecrypt(m.Content)
-
-	//Change the Content to the decrypted version.
-	m.Content = content
-	return &m
-}
-
-//ReceiveMessage is used to retrieve a Message from an input device. It uses bencode to recieve directly from the wire. It does not perform any decryption step.
-func ReceiveMessage(r io.Reader, rsaKey RSAKey) (m *Message, err error) {
+//ReceiveMessage is used to retrieve a Message from an input device. It uses bencode to recieve directly from the wire. It uses SessionByID() from the given manager to retrieve the relevant session, then perform the decryption. It returns a pointer to the relevant Session, the undecrypted message, the decrypted contents, and error if neccessary.
+func ReceiveMessage(r io.Reader, manager SessionManager) (s *Session, m *Message, content string, err error) {
 	//Since we cannot sensibly handle the error
 	//here, we must return it whether or not it
 	//is nil. The Message, whether or not it
 	//came through, will go with it.
 	err = bencode.NewDecoder(r).Decode(&m)
-	if err == nil {
-		//If there is no error, then the
-		//Message is not nil, and we can
-		//set the timestamp.
-		m.Timestamp = time.Now()
+	if err != nil || m.SID == 0 {
+		return
 	}
+	//If there is no error, set the timestamp.
+	m.Timestamp = time.Now()
+
+	//Now, use the SessionManager to retrieve
+	//the relevant Session.
+	s = manager.SessionByID(m.SID)
+	if s == nil {
+		err = errors.New("no session ID matching incoming message")
+		return
+	}
+
+	content = s.arbitraryDecrypt(m.Content)
 	return
 }

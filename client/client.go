@@ -14,8 +14,7 @@ var S *bench.Session
 func main() {
 	//log.SetOutput(ioutil.Discard)
 
-	msg := make(chan *bench.Message) //Create a blocking chan
-	listen(msg)
+	listen()
 
 	println("Type a hostname or IP address to start a session.")
 	for {
@@ -44,30 +43,25 @@ func main() {
 	}
 }
 
-func listen(msg chan *bench.Message) {
+func listen() {
 	ln, err := net.Listen("tcp", "0.0.0.0:"+bench.Port)
 	if err != nil {
 		log.Fatal(err)
 	}
 	log.Println("Listening on", ln.Addr())
-	go func(msg chan<- *bench.Message) {
+	go func() {
 		for {
 			conn, err := ln.Accept()
 			if err != nil {
 				log.Println(conn.RemoteAddr().String(), err)
 				continue
 			}
-			go handle(conn, msg)
+			go handle(conn)
 		}
-	}(msg)
-	go func(msg <-chan *bench.Message) {
-		for m := range msg {
-			showMessage(S, m)
-		}
-	}(msg)
+	}()
 }
 
-func handle(conn net.Conn, msg chan<- *bench.Message) {
+func handle(conn net.Conn) {
 	defer conn.Close()
 	log.Println("Incoming from", conn.RemoteAddr().String())
 	if S == nil {
@@ -78,17 +72,12 @@ func handle(conn net.Conn, msg chan<- *bench.Message) {
 		S = s
 		return
 	}
-	m, err := bench.ReceiveMessage(conn)
+	_, _, content, err := bench.ReceiveMessage(conn, nil)
 	if err != nil {
 		log.Println(err)
 		return
 	}
-	msg <- m
-}
-
-func showMessage(s *bench.Session, m *bench.Message) {
-	md := s.GetMessage(*m)
-	println(md.Content)
+	println(content)
 }
 
 func ui(prompt string) string {
