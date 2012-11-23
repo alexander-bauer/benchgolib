@@ -54,7 +54,7 @@ type defSessionManager struct {
 	Sessions map[uint64]*Session //In-memory Session map for Session and Message functions to use, if SessionManager is not supplied
 }
 
-func (m defSessionManager) AddSession(s *Session) error {
+func (m *defSessionManager) AddSession(s *Session) error {
 	if m.Sessions == nil {
 		m.Sessions = make(map[uint64]*Session, 1)
 	}
@@ -62,13 +62,17 @@ func (m defSessionManager) AddSession(s *Session) error {
 	return nil
 }
 
-func (m defSessionManager) SessionByID(sid uint64) *Session {
+func (m *defSessionManager) SessionByID(sid uint64) *Session {
 	return m.Sessions[sid]
 }
 
-func (m defSessionManager) PrivateKey() *rsa.PrivateKey {
+func (m *defSessionManager) PrivateKey() *rsa.PrivateKey {
 	if m.Key == nil {
-		m.Key, _ = rsaGen(keySize)
+		var err error
+		m.Key, err = rsaGen(keySize)
+		if err != nil {
+			panic(err)
+		}
 		//This doesn't catch any errors, possibly
 		//resulting in runtime errors.
 	}
