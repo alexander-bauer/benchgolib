@@ -30,7 +30,6 @@ var (
 type Session struct {
 	SID            uint64         //Identifier for the session.
 	Cipher         *cast5.Cipher  //The CAST5 Cipher type
-	SessionManager SessionManager //The SessionManager interface for getting a valid RSA key and Sessions by ID
 	Remote         string         //The address of the remote participant.
 	History        []*Message     //The entire history of message objects.
 }
@@ -87,7 +86,7 @@ type sessionEstablish struct {
 	HalfKey    []byte `bencode:"k"`
 }
 
-//NewSession initializes a new session with the remote address. It causes a dialogue and key exchange between the remote and local clients. If manager is not specified, then this function generates a RSA key and keeps it in memory. Future calls will return the same key for the duration of the program's running. If a new Session is initialized properly, NewSession invokes AddSession() on the manager.
+//NewSession initializes a new session with the remote address. It causes a dialogue and key exchange between the remote and local clients. If manager is not specified, then this function uses the default one. It makes precisely one call to PrivateKey() on the manager, and keeps the resultant pointer in memory briefly, so as to avoid unnecessary additional calls. If a new Session is initialized properly, NewSession invokes AddSession() on the manager.
 func NewSession(remote string, manager SessionManager) (s *Session, err error) {
 	//If our manager was not supplied,
 	//then we must use the default.
@@ -132,7 +131,8 @@ func NewSession(remote string, manager SessionManager) (s *Session, err error) {
 	//* Our version
 	//* "NEW SESSION"
 	//* Our public key
-	pubKey := manager.PrivateKey().PublicKey
+	privKey := manager.PrivateKey()
+	pubKey := privKey.PublicKey
 	err = e.Encode(&sessionEstablish{
 		Version:    Version,
 		Type:       NewSessionMsg,
@@ -164,7 +164,7 @@ func NewSession(remote string, manager SessionManager) (s *Session, err error) {
 	}
 
 	//Supposing that everything was okay, decrypt their HalfKey half
-	tmpKey, err := keyDecrypt(manager.PrivateKey(), response.HalfKey)
+	tmpKey, err := keyDecrypt(privKey, response.HalfKey)
 	if err != nil {
 		return
 	}
@@ -202,7 +202,6 @@ func NewSession(remote string, manager SessionManager) (s *Session, err error) {
 	s = &Session{
 		SID:            sid,
 		Cipher:         cipher,
-		SessionManager: manager,
 		Remote:         remote,
 		History:        make([]*Message, 0),
 	}
@@ -276,12 +275,13 @@ func ReceiveSession(conn net.Conn, manager SessionManager) (s *Session, err erro
 		return
 	}
 
-	pubkey := manager.PrivateKey().PublicKey
+	privKey := manager.PrivateKey()
+	pubKey := privKey.PublicKey
 	err = e.Encode(sessionEstablish{
 		Version:    Version,
 		Type:       OkaySessionMsg,
-		PKModulus:  pubkey.N.String(),
-		PKExponent: pubkey.E,
+		PKModulus:  pubKey.N.String(),
+		PKExponent: pubKey.E,
 		HalfKey:    tmpKey,
 	})
 	if err != nil {
@@ -297,7 +297,7 @@ func ReceiveSession(conn net.Conn, manager SessionManager) (s *Session, err erro
 		return
 	}
 
-	tmpKey, err = keyDecrypt(manager.PrivateKey(), response.HalfKey)
+	tmpKey, err = keyDecrypt(privKey, response.HalfKey)
 	if err != nil {
 		return
 	}
@@ -317,7 +317,6 @@ func ReceiveSession(conn net.Conn, manager SessionManager) (s *Session, err erro
 	s = &Session{
 		SID:            sid,
 		Cipher:         cipher,
-		SessionManager: manager,
 		Remote:         remote,
 		History:        make([]*Message, 0),
 	}
