@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	Version = "0.3"
+	Version = "0.4"
 
 	Port           = "8081"
 	NewSessionMsg  = "NEW SESSION"
