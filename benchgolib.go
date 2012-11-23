@@ -22,8 +22,8 @@ const (
 )
 
 var (
-	privKey *rsa.PrivateKey     //In-memory PrivateKey if NewSession if a proper SessionManager isn't supplied
-	sMap    map[uint64]*Session //In-memory Session map for Session and Message functions to use, if SessionManager is not supplied
+	defSM *defSessionManager = &defSessionManager{} //
+
 )
 
 //Session is the type which encapsulates a single benchgo session, including temporary key, remote taret, and message history. It can be used to send and recieve message objects.
@@ -49,19 +49,30 @@ type SessionManager interface {
 	PrivateKey() *rsa.PrivateKey
 }
 
-type defSessionManager struct{}
+type defSessionManager struct {
+	Key      *rsa.PrivateKey     //In-memory PrivateKey if NewSession if a proper SessionManager isn't supplied
+	Sessions map[uint64]*Session //In-memory Session map for Session and Message functions to use, if SessionManager is not supplied
+}
 
-func (manager defSessionManager) AddSession(s *Session) error {
-	sMap[s.SID] = s
+func (m defSessionManager) AddSession(s *Session) error {
+	if m.Sessions == nil {
+		m.Sessions = make(map[uint64]*Session, 1)
+	}
+	m.Sessions[s.SID] = s
 	return nil
 }
 
-func (manager defSessionManager) SessionByID(sid uint64) *Session {
-	return sMap[sid]
+func (m defSessionManager) SessionByID(sid uint64) *Session {
+	return m.Sessions[sid]
 }
 
-func (manager defSessionManager) PrivateKey() *rsa.PrivateKey {
-	return privKey
+func (m defSessionManager) PrivateKey() *rsa.PrivateKey {
+	if m.Key == nil {
+		m.Key, _ = rsaGen(keySize)
+		//This doesn't catch any errors, possibly
+		//resulting in runtime errors.
+	}
+	return m.Key
 }
 
 type sessionEstablish struct {
@@ -74,21 +85,12 @@ type sessionEstablish struct {
 
 //NewSession initializes a new session with the remote address. It causes a dialogue and key exchange between the remote and local clients. If manager is not specified, then this function generates a RSA key and keeps it in memory. Future calls will return the same key for the duration of the program's running. If a new Session is initialized properly, NewSession invokes AddSession() on the manager.
 func NewSession(remote string, manager SessionManager) (s *Session, err error) {
-	//If our manager function was not supplied,
-	//then we must define our own.
+	//If our manager was not supplied,
+	//then we must use the default.
 	if manager == nil {
-		//If our in-memory key does not
-		//exist, then we must generate it.
-		if privKey == nil {
-			privKey, err = rsaGen(keySize)
-			if err != nil {
-				return
-			}
-		}
-		if sMap == nil {
-			sMap = make(map[uint64]*Session)
-		}
-		manager = defSessionManager{}
+		//If the SessionManager doesn't
+		//exist, use the default.
+		manager = defSM
 	}
 
 	//Here, we must establish the session key
@@ -207,22 +209,12 @@ func NewSession(remote string, manager SessionManager) (s *Session, err error) {
 //ReceiveSession
 func ReceiveSession(conn net.Conn, manager SessionManager) (s *Session, err error) {
 	defer conn.Close()
-	//If our manager function was not supplied,
-	//then we must define our own.
+	//If our manager was not supplied,
+	//then we must use the default.
 	if manager == nil {
-		//If our in-memory key does not
-		//exist, then we must generate it.
-		if privKey == nil {
-			privKey, err = rsaGen(keySize)
-			if err != nil {
-				return
-			}
-		}
-		if sMap == nil {
-			sMap = make(map[uint64]*Session)
-
-		}
-		manager = defSessionManager{}
+		//If the SessionManager doesn't
+		//exist, use the default.
+		manager = defSM
 	}
 
 	//Now that the connection is established,
