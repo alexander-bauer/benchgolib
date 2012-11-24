@@ -93,5 +93,5 @@ func ui(prompt string) string {
 		}
 		return line[:len(line)-1] //Remove the newline byte.
 	}
-	return ""
+	return "1"
 }
