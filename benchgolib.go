@@ -11,7 +11,7 @@ import (
 const (
 	Version = "0.2"
 
-	Port = "8081"
+	Port = "9419"
 )
 
 //Session is the type which encapsulates a single benchgo session, including temporary key, remote taret, and message history. It can be used to send and recieve message objects.
