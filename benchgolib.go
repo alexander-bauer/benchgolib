@@ -22,15 +22,15 @@ const (
 )
 
 var (
-	defSM *defSessionManager = &defSessionManager{} //
+	defSM *defSessionManager = &defSessionManager{} //The default SessionManager to fall back on
 )
 
 //Session is the type which encapsulates a single benchgo session, including temporary key, remote taret, and message history. It can be used to send and recieve message objects.
 type Session struct {
-	SID            uint64         //Identifier for the session.
-	Cipher         *cast5.Cipher  //The CAST5 Cipher type
-	Remote         string         //The address of the remote participant.
-	History        []*Message     //The entire history of message objects.
+	SID     uint64        //Identifier for the session.
+	Cipher  *cast5.Cipher //The CAST5 Cipher type
+	Remote  string        //The address of the remote participant.
+	History []*Message    //The entire history of message objects.
 }
 
 //The Message type is used to encapsulate lone messages, which can be transmitted directly across the wire. It contains the Session ID, timestamp, and the contents of the message, but the timestamp is not transmitted.
@@ -199,10 +199,10 @@ func NewSession(remote string, manager SessionManager) (s *Session, err error) {
 	}
 
 	s = &Session{
-		SID:            sid,
-		Cipher:         cipher,
-		Remote:         remote,
-		History:        make([]*Message, 0),
+		SID:     sid,
+		Cipher:  cipher,
+		Remote:  remote,
+		History: make([]*Message, 0),
 	}
 	err = manager.AddSession(s)
 	return
@@ -314,10 +314,10 @@ func ReceiveSession(conn net.Conn, manager SessionManager) (s *Session, err erro
 	}
 
 	s = &Session{
-		SID:            sid,
-		Cipher:         cipher,
-		Remote:         remote,
-		History:        make([]*Message, 0),
+		SID:     sid,
+		Cipher:  cipher,
+		Remote:  remote,
+		History: make([]*Message, 0),
 	}
 	err = manager.AddSession(s)
 	return
