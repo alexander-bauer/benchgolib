@@ -61,7 +61,8 @@ func (m *defSessionManager) AddSession(s *Session) error {
 }
 
 func (m *defSessionManager) SessionByID(sid uint64) *Session {
-	return m.Sessions[sid]
+	s := m.Sessions[sid]
+	return s
 }
 
 func (m *defSessionManager) PrivateKey() *rsa.PrivateKey {
@@ -366,6 +367,13 @@ func (s *Session) SendString(content string) error {
 
 //ReceiveMessage is used to retrieve a Message from an input device. It uses bencode to recieve directly from the wire. It uses SessionByID() from the given manager to retrieve the relevant session, then perform the decryption. It returns a pointer to the relevant Session, the undecrypted message, the decrypted contents, and error if neccessary.
 func ReceiveMessage(r io.Reader, manager SessionManager) (s *Session, m *Message, content string, err error) {
+	//If our manager was not supplied,
+	//then we must use the default.
+	if manager == nil {
+		//If the SessionManager doesn't
+		//exist, use the default.
+		manager = defSM
+	}
 	//Since we cannot sensibly handle the error
 	//here, we must return it whether or not it
 	//is nil. The Message, whether or not it
